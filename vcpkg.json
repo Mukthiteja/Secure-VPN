@@ -1,0 +1,12 @@
+{
+	"name": "customvpn",
+	"version-string": "0.1.0",
+	"builtin-baseline": "b2a667a0a4f1b7b9b6dd4f5d2d7a4b44e6a9e3b4",
+	"dependencies": [
+		"poco"
+	],
+	"features": {},
+	"overrides": []
+}
+
+
