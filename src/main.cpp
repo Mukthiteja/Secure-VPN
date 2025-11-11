@@ -67,9 +67,9 @@ protected:
 			vpn::ClientConfig cfg;
 			vpn::VpnClient client(cfg);
 			client.connect();
-			// Minimal demo interaction; in future we will integrate real tunnel I/O
-			auto hello = std::vector<unsigned char>{'P','I','N','G','\n'};
-			client.send(hello);
+			// Demo: send framed data and print size of echo
+			auto payload = std::vector<unsigned char>{'P','I','N','G'};
+			client.send(payload);
 			auto resp = client.receive();
 			if (!resp.empty()) {
 				std::cout << "Received " << resp.size() << " bytes\n";

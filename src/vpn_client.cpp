@@ -8,6 +8,8 @@
 #include <Poco/Logger.h>
 #include <Poco/Format.h>
 #include <stdexcept>
+#include <Poco/UUIDGenerator.h>
+#include "vpn/tunnel.h"
 
 using Poco::Net::Context;
 using Poco::Net::SecureStreamSocket;
@@ -36,6 +38,10 @@ void VpnClient::connect() {
 	if (_connected) return;
 	Poco::Net::SocketAddress addr(_config.serverHost, _config.serverPort);
 	_socket = std::make_unique<SecureStreamSocket>(addr, _sslContext.get());
+	// Perform tunnel handshake
+	vpn::Tunnel tunnel(*_socket);
+	auto clientSessionId = Poco::UUIDGenerator::defaultGenerator().createRandom().toString();
+	tunnel.clientHandshake(clientSessionId);
 	_connected = true;
 	Poco::Logger::get("VpnClient").information("Connected to VPN server");
 }
@@ -52,16 +58,14 @@ void VpnClient::disconnect() {
 
 void VpnClient::send(const std::vector<unsigned char>& data) {
 	if (!_connected || !_socket) throw std::runtime_error("Not connected");
-	_socket->sendBytes(data.data(), static_cast<int>(data.size()));
+	vpn::Tunnel tunnel(*_socket);
+	tunnel.sendData(data);
 }
 
 std::vector<unsigned char> VpnClient::receive() {
 	if (!_connected || !_socket) throw std::runtime_error("Not connected");
-	std::vector<unsigned char> buffer(4096);
-	int n = _socket->receiveBytes(buffer.data(), static_cast<int>(buffer.size()));
-	if (n < 0) n = 0;
-	buffer.resize(static_cast<size_t>(n));
-	return buffer;
+	vpn::Tunnel tunnel(*_socket);
+	return tunnel.receiveData(std::chrono::milliseconds(5000));
 }
 
 } // namespace vpn

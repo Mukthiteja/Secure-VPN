@@ -12,6 +12,8 @@
 #include <Poco/Thread.h>
 #include <Poco/Timespan.h>
 #include <iostream>
+#include <Poco/UUIDGenerator.h>
+#include "vpn/tunnel.h"
 
 using Poco::Net::Context;
 using Poco::Net::SecureServerSocket;
@@ -30,14 +32,27 @@ public:
 
 	void run() override {
 		try {
-			Poco::Net::SocketStream stream(socket());
-			stream << "OK VPN-HELLO\n";
-			stream.flush();
-			// Placeholder: Echo loop for initial connectivity validation
-			char buffer[4096];
-			int n = 0;
-			while ((n = socket().receiveBytes(buffer, sizeof(buffer))) > 0) {
-				socket().sendBytes(buffer, n);
+			Poco::Net::SecureStreamSocket secureSock(socket());
+			vpn::Tunnel tunnel(secureSock);
+			// Handshake
+			auto serverSessionId = Poco::UUIDGenerator::defaultGenerator().createRandom().toString();
+			auto clientSessionId = tunnel.serverHandshake(serverSessionId);
+			Poco::Logger::get("VpnServer").information(Poco::format("Session established serverId=%s clientId=%s", serverSessionId, clientSessionId));
+			// Main loop: handle DATA and HEARTBEAT
+			for (;;) {
+				auto data = tunnel.receiveData(std::chrono::milliseconds(30000));
+				if (!data.empty()) {
+					// Echo back
+					tunnel.sendData(data);
+					continue;
+				}
+				// Check heartbeat
+				if (tunnel.receiveHeartbeat(std::chrono::milliseconds(1))) {
+					// Optionally respond with heartbeat for liveness symmetry
+					tunnel.sendHeartbeat();
+					continue;
+				}
+				// If no data and no heartbeat in the interval, loop continues until timeout
 			}
 		} catch (const std::exception& ex) {
 			Poco::Logger::get("VpnServer").warning(Poco::format("Connection error: %s", ex.what()));
