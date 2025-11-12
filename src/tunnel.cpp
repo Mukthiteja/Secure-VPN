@@ -99,6 +99,37 @@ std::vector<std::uint8_t> Tunnel::receiveEncrypted(std::chrono::milliseconds tim
 	return {};
 }
 
+void Tunnel::sendAuth(const std::vector<std::uint8_t>& cipherFrame) {
+	Frame f{FrameType::AUTH, cipherFrame};
+	sendFrame(f);
+}
+
+std::vector<std::uint8_t> Tunnel::receiveAuth(std::chrono::milliseconds timeout) {
+	Frame f;
+	if (!receiveFrame(f, timeout)) return {};
+	if (f.type == FrameType::AUTH) return f.payload;
+	return {};
+}
+
+void Tunnel::sendAuthResult(bool success, const std::string& message) {
+	std::vector<std::uint8_t> payload;
+	payload.reserve(1 + message.size());
+	payload.push_back(success ? 1 : 0);
+	payload.insert(payload.end(), message.begin(), message.end());
+	Frame f{FrameType::AUTH_RESULT, payload};
+	sendFrame(f);
+}
+
+bool Tunnel::receiveAuthResult(std::chrono::milliseconds timeout, bool& successOut, std::string& messageOut) {
+	Frame f;
+	if (!receiveFrame(f, timeout)) return false;
+	if (f.type != FrameType::AUTH_RESULT) return false;
+	if (f.payload.empty()) return false;
+	successOut = f.payload[0] == 1;
+	messageOut.assign(reinterpret_cast<const char*>(f.payload.data() + 1), f.payload.size() - 1);
+	return true;
+}
+
 void Tunnel::sendHeartbeat() {
 	Frame f{FrameType::HEARTBEAT, {}};
 	sendFrame(f);

@@ -30,6 +30,15 @@
 - **Authentication**:
   - Server authentication is required by default.
   - Client authentication via mutual TLS is supported and recommended for production.
+  - Application-layer authentication (Day 4) uses username/password exchanged inside encrypted tunnel.
+- **Authentication flow (Day 4)**:
+  - Client sends encrypted credentials immediately after session keys are derived.
+  - Server validates against `CredentialStore` (backed by JSON file `config/users.json`).
+  - On success, server replies with `AUTH_RESULT` success frame; otherwise it rejects and closes the tunnel.
+- **Credential storage**:
+  - Demo store accepts plaintext passwords for simplicity.
+  - For production, store per-user salt and SHA-256 hash (base64-encoded) instead of plaintext.
+
 - **Integrity**: TLS provides authenticated encryption (AEAD) ensuring integrity and replay protection.
 - **Certificates**: PEM files for CA, server, client. Place in `certs/` (not committed).
 

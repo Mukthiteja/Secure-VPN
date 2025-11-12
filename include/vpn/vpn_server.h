@@ -11,6 +11,7 @@
 #include <Poco/Net/AcceptCertificateHandler.h>
 #include <Poco/Util/ServerApplication.h>
 #include <Poco/AutoPtr.h>
+#include "vpn/auth.h"
 #include <memory>
 #include <string>
 
@@ -23,6 +24,7 @@ struct ServerConfig {
 	std::string keyFile = "certs/server.key";
 	std::string caFile = "certs/ca.crt";
 	bool requireClientAuth = true;
+	std::string credentialFile = "config/users.json";
 };
 
 class VpnServer {
@@ -39,6 +41,7 @@ private:
 	ServerConfig _config;
 	std::unique_ptr<Poco::Net::TCPServer> _tcpServer;
 	std::shared_ptr<Poco::Net::Context> _sslContext;
+	CredentialStore::Ptr _credentialStore;
 	bool _running = false;
 };
 

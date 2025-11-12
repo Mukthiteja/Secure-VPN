@@ -15,7 +15,9 @@ enum class FrameType : std::uint8_t {
 	DATA = 3,
 	HEARTBEAT = 4,
 	CLOSE = 5,
-	ENCRYPTED_DATA = 6
+	ENCRYPTED_DATA = 6,
+	AUTH = 7,
+	AUTH_RESULT = 8
 };
 
 struct Frame {
@@ -46,6 +48,10 @@ public:
 	std::vector<std::uint8_t> receiveData(std::chrono::milliseconds timeout);
 	void sendEncrypted(const std::vector<std::uint8_t>& cipherFrame);
 	std::vector<std::uint8_t> receiveEncrypted(std::chrono::milliseconds timeout);
+	void sendAuth(const std::vector<std::uint8_t>& cipherFrame);
+	std::vector<std::uint8_t> receiveAuth(std::chrono::milliseconds timeout);
+	void sendAuthResult(bool success, const std::string& message);
+	bool receiveAuthResult(std::chrono::milliseconds timeout, bool& successOut, std::string& messageOut);
 
 	// Heartbeat
 	void sendHeartbeat();

@@ -12,9 +12,12 @@
 #include <Poco/Thread.h>
 #include <Poco/Timespan.h>
 #include <iostream>
+#include <Poco/JSON/Parser.h>
+#include <Poco/JSON/Object.h>
 #include <Poco/UUIDGenerator.h>
 #include "vpn/tunnel.h"
 #include "vpn/crypto.h"
+#include "vpn/auth.h"
 
 using Poco::Net::Context;
 using Poco::Net::SecureServerSocket;
@@ -28,8 +31,9 @@ namespace vpn {
 
 class VpnServer::Connection : public TCPServerConnection {
 public:
-	explicit Connection(const Poco::Net::StreamSocket& s)
-		: TCPServerConnection(s) {}
+	Connection(const Poco::Net::StreamSocket& s, CredentialStore::Ptr store)
+		: TCPServerConnection(s)
+		, _store(std::move(store)) {}
 
 	void run() override {
 		try {
@@ -43,6 +47,41 @@ public:
 			auto keys = vpn::deriveSessionKeys(keySeed, clientNonce, serverNonce);
 			vpn::SessionCrypto sessionCrypto(keys.encKey, keys.macKey);
 			Poco::Logger::get("VpnServer").information(Poco::format("Session established serverId=%s clientId=%s", serverSessionId, clientSessionId));
+
+			// Authentication phase
+			auto authCipher = tunnel.receiveAuth(std::chrono::milliseconds(10000));
+			if (authCipher.empty()) {
+				tunnel.sendAuthResult(false, "Authentication timeout");
+				tunnel.sendClose();
+				return;
+			}
+
+			std::string username;
+			std::string password;
+			try {
+				auto authPlain = sessionCrypto.decrypt(authCipher);
+				std::string authJson(authPlain.begin(), authPlain.end());
+				Poco::JSON::Parser parser;
+				auto result = parser.parse(authJson);
+				auto obj = result.extract<Poco::JSON::Object::Ptr>();
+				username = obj->getValue<std::string>("username");
+				password = obj->getValue<std::string>("password");
+			} catch (const std::exception& ex) {
+				Poco::Logger::get("VpnServer").warning(Poco::format("Auth parse error: %s", ex.what()));
+				tunnel.sendAuthResult(false, "Invalid auth payload");
+				tunnel.sendClose();
+				return;
+			}
+
+			if (!_store || !_store->verify(username, password)) {
+				Poco::Logger::get("VpnServer").warning(Poco::format("Authentication failed for user %s", username));
+				tunnel.sendAuthResult(false, "Authentication failed");
+				tunnel.sendClose();
+				return;
+			}
+			tunnel.sendAuthResult(true, "OK");
+			Poco::Logger::get("VpnServer").information(Poco::format("User %s authenticated", username));
+
 			// Main loop: handle DATA and HEARTBEAT
 			for (;;) {
 				// Prefer encrypted data
@@ -76,6 +115,22 @@ public:
 			Poco::Logger::get("VpnServer").warning(Poco::format("Connection error: %s", ex.what()));
 		}
 	}
+
+private:
+	CredentialStore::Ptr _store;
+};
+
+class ConnectionFactory : public TCPServerConnectionFactory {
+public:
+	explicit ConnectionFactory(CredentialStore::Ptr store)
+		: _store(std::move(store)) {}
+
+	TCPServerConnection* createConnection(const Poco::Net::StreamSocket& socket) override {
+		return new VpnServer::Connection(socket, _store);
+	}
+
+private:
+	CredentialStore::Ptr _store;
 };
 
 VpnServer::VpnServer(const ServerConfig& config)
@@ -109,13 +164,15 @@ void VpnServer::start() {
 	Poco::SharedPtr<Poco::Net::PrivateKeyPassphraseHandler> pkeyHandler = new Poco::Net::KeyConsoleHandler(false);
 	SSLManager::instance().initializeServer(pkeyHandler, certHandler, _sslContext.get());
 
+	_credentialStore = CredentialStore::loadFromFile(_config.credentialFile);
+
 	SecureServerSocket svs(Poco::Net::SocketAddress(_config.address, _config.port), 64, _sslContext.get());
 	auto params = new TCPServerParams;
 	params->setMaxThreads(16);
 	params->setMaxQueued(64);
 	params->setThreadIdleTime(Poco::Timespan(10, 0));
 
-	_tcpServer = std::make_unique<TCPServer>(new TCPServerConnectionFactoryImpl<Connection>(), svs, params);
+	_tcpServer = std::make_unique<TCPServer>(new ConnectionFactory(_credentialStore), svs, params);
 	_tcpServer->start();
 	_running = true;
 	Poco::Logger::get("VpnServer").information("VPN server started");
@@ -125,6 +182,7 @@ void VpnServer::stop() {
 	if (!_running) return;
 	_tcpServer->stop();
 	_tcpServer.reset();
+	_credentialStore.reset();
 	_running = false;
 	Poco::Logger::get("VpnServer").information("VPN server stopped");
 }

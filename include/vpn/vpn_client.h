@@ -21,6 +21,8 @@ struct ClientConfig {
 	std::string keyFile = "certs/client.key";
 	std::string caFile = "certs/ca.crt";
 	bool verifyServer = true;
+	std::string username = "vpnuser";
+	std::string password = "ChangeMe";
 };
 
 class VpnClient {

@@ -9,6 +9,8 @@
 #include <Poco/Format.h>
 #include <stdexcept>
 #include <Poco/UUIDGenerator.h>
+#include <Poco/JSON/Object.h>
+#include <Poco/JSON/Stringifier.h>
 #include "vpn/tunnel.h"
 #include "vpn/crypto.h"
 
@@ -47,6 +49,26 @@ void VpnClient::connect() {
 	tunnel.clientHandshake(clientSessionId, clientNonce, serverSessionId, serverNonce, keySeed);
 	auto keys = vpn::deriveSessionKeys(keySeed, clientNonce, serverNonce);
 	_sessionCrypto = std::make_unique<vpn::SessionCrypto>(keys.encKey, keys.macKey);
+
+	// Authentication
+	Poco::JSON::Object::Ptr authObj = new Poco::JSON::Object();
+	authObj->set("username", _config.username);
+	authObj->set("password", _config.password);
+	std::stringstream authStream;
+	Poco::JSON::Stringifier::stringify(authObj, authStream);
+	auto authPlain = authStream.str();
+	std::vector<std::uint8_t> authPayload(authPlain.begin(), authPlain.end());
+	auto authCipher = _sessionCrypto->encrypt(authPayload);
+	tunnel.sendAuth(authCipher);
+	bool success = false;
+	std::string message;
+	if (!tunnel.receiveAuthResult(std::chrono::milliseconds(5000), success, message) || !success) {
+		tunnel.sendClose();
+		_sessionCrypto.reset();
+		_socket->shutdown();
+		_socket.reset();
+		throw std::runtime_error(message.empty() ? "Authentication failed" : message);
+	}
 	_connected = true;
 	Poco::Logger::get("VpnClient").information("Connected to VPN server");
 }
@@ -54,9 +76,14 @@ void VpnClient::connect() {
 void VpnClient::disconnect() {
 	if (!_connected) return;
 	try {
+		if (_socket) {
+			vpn::Tunnel tunnel(*_socket);
+			tunnel.sendClose();
+		}
 		_socket->shutdown();
 	} catch (...) {}
 	_socket.reset();
+	_sessionCrypto.reset();
 	_connected = false;
 	Poco::Logger::get("VpnClient").information("Disconnected from VPN server");
 }

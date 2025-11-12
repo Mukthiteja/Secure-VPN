@@ -36,6 +36,21 @@ protected:
 				.argument("mode")
 				.required(false)
 				.repeatable(false));
+		options.addOption(
+			Option("credentials", "c", "Path to credential store JSON (server only)")
+				.argument("file")
+				.required(false)
+				.repeatable(false));
+		options.addOption(
+			Option("username", "u", "Username for client authentication")
+				.argument("username")
+				.required(false)
+				.repeatable(false));
+		options.addOption(
+			Option("password", "p", "Password for client authentication")
+				.argument("password")
+				.required(false)
+				.repeatable(false));
 	}
 
 	void handleOption(const std::string& name, const std::string& value) override {
@@ -44,6 +59,12 @@ protected:
 			_helpRequested = true;
 		} else if (name == "mode") {
 			_mode = value;
+		} else if (name == "credentials") {
+			_credentialFile = value;
+		} else if (name == "username") {
+			_username = value;
+		} else if (name == "password") {
+			_password = value;
 		}
 	}
 
@@ -51,7 +72,7 @@ protected:
 		if (_helpRequested) {
 			HelpFormatter helpFormatter(options());
 			helpFormatter.setCommand(commandName());
-			helpFormatter.setUsage("[-m server|client]");
+			helpFormatter.setUsage("[-m server|client] [--credentials file] [--username user --password pass]");
 			helpFormatter.setHeader("Custom VPN application powered by Poco.");
 			helpFormatter.format(std::cout);
 			return Application::EXIT_OK;
@@ -59,12 +80,15 @@ protected:
 
 		if (_mode == "server") {
 			vpn::ServerConfig cfg;
+			if (!_credentialFile.empty()) cfg.credentialFile = _credentialFile;
 			vpn::VpnServer server(cfg);
 			server.start();
 			waitForTerminationRequest();
 			server.stop();
 		} else if (_mode == "client") {
 			vpn::ClientConfig cfg;
+			if (!_username.empty()) cfg.username = _username;
+			if (!_password.empty()) cfg.password = _password;
 			vpn::VpnClient client(cfg);
 			client.connect();
 			// Demo: send framed data and print size of echo
@@ -84,6 +108,9 @@ protected:
 private:
 	bool _helpRequested;
 	std::string _mode;
+	std::string _credentialFile;
+	std::string _username;
+	std::string _password;
 };
 
 POCO_APP_MAIN(CustomVpnApp)

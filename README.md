@@ -29,6 +29,14 @@ Certificates are required for TLS. Place PEM files in `certs\` (not committed):
 - `certs\ca.crt` (CA)
 - `certs\server.crt`, `certs\server.key`
 - `certs\client.crt`, `certs\client.key`
+- Create a credential store at `config\users.json` (sample provided):
+  ```json
+  {
+    "users": [
+      { "username": "vpnuser", "password": "ChangeMe" }
+    ]
+  }
+  ```
 
 ```powershell
 # Server
@@ -39,6 +47,7 @@ Certificates are required for TLS. Place PEM files in `certs\` (not committed):
 ```
 
 Day 2+: On connect, a tunnel handshake occurs and the client sends a framed payload; the server echoes it. From Day 3, payloads are application-encrypted (AES-256-CBC + HMAC-SHA256) on top of TLS.
+Day 4+: The client authenticates with username/password (encrypted inside the tunnel) and the server accepts only verified users from the credential store. Override defaults with `--username`, `--password`, and `--credentials` CLI options.
 
 ## Project Layout
 - `CMakeLists.txt` root build file
@@ -62,6 +71,21 @@ Day 2+: On connect, a tunnel handshake occurs and the client sends a framed payl
   - Client sends ENCRYPTED_DATA; server decrypts, echoes re-encrypted data.
   - Client prints “Received 4 bytes” for the echoed plaintext.
   - Packet capture shows opaque TLS records (no plaintext payload).
+
+## Day 4: User authentication and secure connections
+- Ensure `config\users.json` defines allowed users (plaintext passwords accepted for demo; use salted+hash fields for stronger storage).
+- Start server with optional credential override:
+  ```powershell
+  .\build\Release\customvpn.exe --mode=server --credentials=config\users.json
+  ```
+- Start client with credentials (defaults: `vpnuser` / `ChangeMe`):
+  ```powershell
+  .\build\Release\customvpn.exe --mode=client --username=vpnuser --password=ChangeMe
+  ```
+- Expected behavior:
+  - After TLS and session key setup, client sends encrypted auth payload.
+  - Server validates user; on success it returns encrypted OK and keeps tunnel open.
+  - On failure, client receives rejection and the connection closes.
 
 # Custom VPN (C++ / Poco)
 

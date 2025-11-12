@@ -2,6 +2,8 @@ add_library(customvpn_core
 	${CMAKE_CURRENT_SOURCE_DIR}/vpn_client.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/vpn_server.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/tunnel.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/crypto.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/auth.cpp
 )
 
 target_include_directories(customvpn_core
