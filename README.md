@@ -38,7 +38,7 @@ Certificates are required for TLS. Place PEM files in `certs\` (not committed):
 .\build\Release\customvpn.exe --mode=client
 ```
 
-On connect, the server returns a greeting; the client sends a small message and reads the echo. This is a placeholder for the data plane.
+Day 2+: On connect, a tunnel handshake occurs and the client sends a framed payload; the server echoes it. From Day 3, payloads are application-encrypted (AES-256-CBC + HMAC-SHA256) on top of TLS.
 
 ## Project Layout
 - `CMakeLists.txt` root build file
@@ -49,11 +49,19 @@ On connect, the server returns a greeting; the client sends a small message and 
 - `certs\` (ignored) TLS materials (not committed)
 
 ## Notes
-- TLS provides encryption, integrity, and key exchange (ECDHE). We will later integrate real tunneling (e.g., Wintun/TAP) and richer authentication.
+- TLS provides transport security (encryption/integrity/key exchange). We add an app-layer encryption (AES-256-CBC + HMAC-SHA256) with keys derived via HKDF from a per-session seed exchanged during tunnel handshake.
 
 ## Troubleshooting
 - If CMake can't find Poco, ensure `-DCMAKE_TOOLCHAIN_FILE=D:\vcpkg\scripts\buildsystems\vcpkg.cmake` is passed and vcpkg is bootstrapped.
 - For MSVC, run from a "x64 Native Tools Command Prompt for VS" or have Build Tools in PATH.
+
+## Day 3: How to validate encryption
+- Build and run server and client as above.
+- Expected behavior:
+  - Client and server perform extended handshake (nonces + key seed).
+  - Client sends ENCRYPTED_DATA; server decrypts, echoes re-encrypted data.
+  - Client prints “Received 4 bytes” for the echoed plaintext.
+  - Packet capture shows opaque TLS records (no plaintext payload).
 
 # Custom VPN (C++ / Poco)
 

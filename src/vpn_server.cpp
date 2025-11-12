@@ -14,6 +14,7 @@
 #include <iostream>
 #include <Poco/UUIDGenerator.h>
 #include "vpn/tunnel.h"
+#include "vpn/crypto.h"
 
 using Poco::Net::Context;
 using Poco::Net::SecureServerSocket;
@@ -36,13 +37,30 @@ public:
 			vpn::Tunnel tunnel(secureSock);
 			// Handshake
 			auto serverSessionId = Poco::UUIDGenerator::defaultGenerator().createRandom().toString();
-			auto clientSessionId = tunnel.serverHandshake(serverSessionId);
+			std::string clientSessionId;
+			std::vector<std::uint8_t> clientNonce, serverNonce, keySeed;
+			tunnel.serverHandshake(serverSessionId, clientSessionId, clientNonce, serverNonce, keySeed);
+			auto keys = vpn::deriveSessionKeys(keySeed, clientNonce, serverNonce);
+			vpn::SessionCrypto sessionCrypto(keys.encKey, keys.macKey);
 			Poco::Logger::get("VpnServer").information(Poco::format("Session established serverId=%s clientId=%s", serverSessionId, clientSessionId));
 			// Main loop: handle DATA and HEARTBEAT
 			for (;;) {
-				auto data = tunnel.receiveData(std::chrono::milliseconds(30000));
+				// Prefer encrypted data
+				auto enc = tunnel.receiveEncrypted(std::chrono::milliseconds(30000));
+				if (!enc.empty()) {
+					try {
+						auto plain = sessionCrypto.decrypt(enc);
+						// Echo plaintext back as encrypted
+						auto resp = sessionCrypto.encrypt(plain);
+						tunnel.sendEncrypted(resp);
+					} catch (const std::exception& ex) {
+						Poco::Logger::get("VpnServer").warning(Poco::format("Decrypt error: %s", ex.what()));
+					}
+					continue;
+				}
+				// Fallback to legacy DATA if present
+				auto data = tunnel.receiveData(std::chrono::milliseconds(1));
 				if (!data.empty()) {
-					// Echo back
 					tunnel.sendData(data);
 					continue;
 				}

@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <Poco/UUIDGenerator.h>
 #include "vpn/tunnel.h"
+#include "vpn/crypto.h"
 
 using Poco::Net::Context;
 using Poco::Net::SecureStreamSocket;
@@ -41,7 +42,11 @@ void VpnClient::connect() {
 	// Perform tunnel handshake
 	vpn::Tunnel tunnel(*_socket);
 	auto clientSessionId = Poco::UUIDGenerator::defaultGenerator().createRandom().toString();
-	tunnel.clientHandshake(clientSessionId);
+	std::string serverSessionId;
+	std::vector<std::uint8_t> clientNonce, serverNonce, keySeed;
+	tunnel.clientHandshake(clientSessionId, clientNonce, serverSessionId, serverNonce, keySeed);
+	auto keys = vpn::deriveSessionKeys(keySeed, clientNonce, serverNonce);
+	_sessionCrypto = std::make_unique<vpn::SessionCrypto>(keys.encKey, keys.macKey);
 	_connected = true;
 	Poco::Logger::get("VpnClient").information("Connected to VPN server");
 }
@@ -59,12 +64,23 @@ void VpnClient::disconnect() {
 void VpnClient::send(const std::vector<unsigned char>& data) {
 	if (!_connected || !_socket) throw std::runtime_error("Not connected");
 	vpn::Tunnel tunnel(*_socket);
-	tunnel.sendData(data);
+	if (_sessionCrypto) {
+		auto enc = _sessionCrypto->encrypt(data);
+		tunnel.sendEncrypted(enc);
+	} else {
+		tunnel.sendData(data);
+	}
 }
 
 std::vector<unsigned char> VpnClient::receive() {
 	if (!_connected || !_socket) throw std::runtime_error("Not connected");
 	vpn::Tunnel tunnel(*_socket);
+	if (_sessionCrypto) {
+		auto enc = tunnel.receiveEncrypted(std::chrono::milliseconds(5000));
+		if (!enc.empty()) {
+			return _sessionCrypto->decrypt(enc);
+		}
+	}
 	return tunnel.receiveData(std::chrono::milliseconds(5000));
 }
 

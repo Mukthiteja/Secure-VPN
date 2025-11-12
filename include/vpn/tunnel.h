@@ -14,7 +14,8 @@ enum class FrameType : std::uint8_t {
 	HELLO_ACK = 2,
 	DATA = 3,
 	HEARTBEAT = 4,
-	CLOSE = 5
+	CLOSE = 5,
+	ENCRYPTED_DATA = 6
 };
 
 struct Frame {
@@ -26,13 +27,25 @@ class Tunnel {
 public:
 	explicit Tunnel(Poco::Net::SecureStreamSocket& socket);
 
-	// Handshake: client sends HELLO (clientSessionId), server replies HELLO_ACK (serverSessionId)
-	void clientHandshake(const std::string& clientSessionId);
-	std::string serverHandshake(const std::string& serverSessionId);
+	// Handshake (extended):
+	// Client sends HELLO: [idLen:1][id][clientNonce:16]
+	// Server replies HELLO_ACK: [idLen:1][id][serverNonce:16][keySeed:32]
+	void clientHandshake(const std::string& clientSessionId,
+	                     std::vector<std::uint8_t>& outClientNonce,
+	                     std::string& outServerSessionId,
+	                     std::vector<std::uint8_t>& outServerNonce,
+	                     std::vector<std::uint8_t>& outKeySeed);
+	void serverHandshake(const std::string& serverSessionId,
+	                     std::string& outClientSessionId,
+	                     std::vector<std::uint8_t>& outClientNonce,
+	                     std::vector<std::uint8_t>& outServerNonce,
+	                     std::vector<std::uint8_t>& outKeySeed);
 
 	// Data
 	void sendData(const std::vector<std::uint8_t>& data);
 	std::vector<std::uint8_t> receiveData(std::chrono::milliseconds timeout);
+	void sendEncrypted(const std::vector<std::uint8_t>& cipherFrame);
+	std::vector<std::uint8_t> receiveEncrypted(std::chrono::milliseconds timeout);
 
 	// Heartbeat
 	void sendHeartbeat();

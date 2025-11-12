@@ -12,6 +12,8 @@
 
 namespace vpn {
 
+class SessionCrypto;
+
 struct ClientConfig {
 	std::string serverHost = "127.0.0.1";
 	unsigned short serverPort = 44350;
@@ -36,6 +38,7 @@ private:
 	ClientConfig _config;
 	std::shared_ptr<Poco::Net::Context> _sslContext;
 	std::unique_ptr<Poco::Net::SecureStreamSocket> _socket;
+	std::unique_ptr<SessionCrypto> _sessionCrypto;
 	bool _connected = false;
 };
 
