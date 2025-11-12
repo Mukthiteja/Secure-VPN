@@ -30,25 +30,7 @@ add_subdirectory(src)
 
 if(CUSTOMVPN_BUILD_TESTS)
 	enable_testing()
-	# add_subdirectory(tests) # Placeholder for future test suite
+	add_subdirectory(tests)
 endif()
-
-cmake_minimum_required(VERSION 3.20)
-project(CustomVpn LANGUAGES CXX)
-
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
-# Enable folders in IDEs
-set_property(GLOBAL PROPERTY USE_FOLDERS ON)
-
-# vcpkg toolchain (optional if user has VCPKG_ROOT set)
-if(DEFINED ENV{VCPKG_ROOT} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-	set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
-endif()
-
-# Sources
-add_subdirectory(src)
 
 

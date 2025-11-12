@@ -1,0 +1,75 @@
+================================================================================
+CUSTOMVPN - RUN INSTRUCTIONS
+================================================================================
+
+CURRENT STATUS:
+--------------
+✅ Certificates: Generated successfully in certs\ directory
+✅ Configuration: config\users.json ready with test user
+✅ Source Code: All project files present
+❌ Build: Cannot complete due to vcpkg dependency build issues
+
+THE ISSUE:
+----------
+The project cannot be built automatically because:
+- vcpkg is trying to build dependencies (zlib, pcre2, poco) from source
+- The build process is failing during dependency compilation
+- This requires proper Visual Studio build tools configuration
+
+TO RUN THE PROJECT:
+-------------------
+
+Option 1: Use Visual Studio Developer Command Prompt (RECOMMENDED)
+
+1. Open Start Menu
+2. Search for "x64 Native Tools Command Prompt for VS 2019" (or VS 2022)
+3. Navigate to project:
+   cd D:\CustomVpn
+
+4. Build the project:
+   cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=D:\vcpkg\scripts\buildsystems\vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows
+   cmake --build build --config Release
+
+5. If dependencies fail to build, try installing Poco manually first:
+   cd D:\vcpkg
+   .\vcpkg.exe install poco:x64-windows
+
+6. Then retry the build from step 4
+
+7. Once built, run server (Terminal 1):
+   build\Release\customvpn.exe --mode=server --credentials=config\users.json
+
+8. Run client (Terminal 2):
+   build\Release\customvpn.exe --mode=client --username=vpnuser --password=ChangeMe
+
+Option 2: Fix vcpkg Build Issues
+
+If build continues to fail:
+1. Update vcpkg: cd D:\vcpkg && git pull
+2. Check Visual Studio C++ build tools are fully installed
+3. Try: .\vcpkg.exe install zlib:x64-windows (to test if dependencies build)
+4. Check build logs in: D:\vcpkg\buildtrees\zlib\config-x64-windows-*.log
+
+WHAT'S READY:
+-------------
+- All TLS certificates generated (ca.crt, server.crt, client.crt, etc.)
+- User configuration file (config\users.json)
+- Complete source code
+- Build scripts and documentation
+
+EXPECTED BEHAVIOR WHEN RUNNING:
+--------------------------------
+Server output:
+  VPN server started
+  Session established serverId=<uuid> clientId=<uuid>
+  User vpnuser authenticated
+
+Client output:
+  Connected to VPN server
+  Received 4 bytes
+  Disconnected from VPN server
+
+================================================================================
+For detailed documentation, see README.md and docs/ directory
+================================================================================
+

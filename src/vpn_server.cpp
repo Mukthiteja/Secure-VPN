@@ -82,10 +82,12 @@ public:
 			tunnel.sendAuthResult(true, "OK");
 			Poco::Logger::get("VpnServer").information(Poco::format("User %s authenticated", username));
 
-			// Main loop: handle DATA and HEARTBEAT
+			// Main loop: handle DATA and HEARTBEAT with optimized polling
+			// Use shorter timeout for better responsiveness while maintaining efficiency
+			const auto pollTimeout = std::chrono::milliseconds(100);
 			for (;;) {
-				// Prefer encrypted data
-				auto enc = tunnel.receiveEncrypted(std::chrono::milliseconds(30000));
+				// Prefer encrypted data (primary path)
+				auto enc = tunnel.receiveEncrypted(pollTimeout);
 				if (!enc.empty()) {
 					try {
 						auto plain = sessionCrypto.decrypt(enc);
@@ -94,22 +96,23 @@ public:
 						tunnel.sendEncrypted(resp);
 					} catch (const std::exception& ex) {
 						Poco::Logger::get("VpnServer").warning(Poco::format("Decrypt error: %s", ex.what()));
+						break; // Exit on crypto errors to prevent resource waste
 					}
 					continue;
 				}
-				// Fallback to legacy DATA if present
+				// Fallback to legacy DATA if present (minimal timeout for non-blocking check)
 				auto data = tunnel.receiveData(std::chrono::milliseconds(1));
 				if (!data.empty()) {
 					tunnel.sendData(data);
 					continue;
 				}
-				// Check heartbeat
+				// Check heartbeat (non-blocking)
 				if (tunnel.receiveHeartbeat(std::chrono::milliseconds(1))) {
-					// Optionally respond with heartbeat for liveness symmetry
 					tunnel.sendHeartbeat();
 					continue;
 				}
-				// If no data and no heartbeat in the interval, loop continues until timeout
+				// Brief yield to prevent tight loop when idle
+				Poco::Thread::yield();
 			}
 		} catch (const std::exception& ex) {
 			Poco::Logger::get("VpnServer").warning(Poco::format("Connection error: %s", ex.what()));
